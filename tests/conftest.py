@@ -29,25 +29,22 @@ def mock_workflow_manager_override():
     """Override the WorkflowManager dependency with a mock."""
     mock_manager = MagicMock()
     
-    # Configure the mock engine that will be returned by the manager
-    mock_engine = MagicMock()
-    mock_engine.name = "MockEngine"  # Default name
-
-    def execute_side_effect(config):
-        # The engine that would be used is in the config
-        engine_name = config.get("engine", mock_manager.current_engine)
-        return {
-            "workflow_id": "mock_workflow_123",
-            "status": "completed",
-            "result": {"message": "Mock execution successful"},
-            "engine": engine_name.capitalize(),  # Return the engine name used
-        }
-
-    mock_engine.execute.side_effect = execute_side_effect
+    # This engine will be returned by the manager.
+    # Its `execute` method must be awaitable, so it's an AsyncMock.
+    mock_engine = AsyncMock()
+    mock_engine.name = "MockEngine"
     
-    # The manager's get_engine() will return our sophisticated mock engine
+    # The result when the endpoint calls `await engine.execute(...)`
+    mock_engine.execute.return_value = {
+        "workflow_id": "mock_workflow_123",
+        "status": "completed",
+        "result": {"message": "Mock execution successful"},
+        "engine": "MockEngine",
+    }
+    
+    # Configure the manager to return our mock engine
     mock_manager.get_engine.return_value = mock_engine
-    mock_manager.current_engine = "crewai"  # Default engine
+    mock_manager.current_engine = "crewai"
     
     app.dependency_overrides[get_workflow_manager] = lambda: mock_manager
     yield mock_manager

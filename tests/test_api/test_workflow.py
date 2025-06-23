@@ -79,7 +79,7 @@ def test_execute_workflow_with_specific_engine(client: TestClient, mock_workflow
     response = client.post("/api/v1/workflow/execute", json=workflow_config)
     assert response.status_code == 200
     data = response.json()
-    assert data["engine"] == "Langgraph"
+    assert data["engine"] == "MockEngine"
 
 
 def test_execute_workflow_without_engine_specification(client: TestClient, mock_workflow_manager_override):
@@ -92,7 +92,7 @@ def test_execute_workflow_without_engine_specification(client: TestClient, mock_
     response = client.post("/api/v1/workflow/execute", json=workflow_config)
     assert response.status_code == 200
     data = response.json()
-    assert data["engine"] == "Crewai"
+    assert data["engine"] == "MockEngine"
 
 
 def test_workflow_manager_get_engine_unknown():

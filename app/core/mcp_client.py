@@ -88,7 +88,7 @@ class MCPClient:
         
         response = await self._client.get("/health")
         response.raise_for_status()
-        data = response.json()
+        data = await response.json()
         
         if data.get("status") != "ok":
             raise ConnectionError("MCP server is not healthy")
@@ -102,7 +102,7 @@ class MCPClient:
             response = await self._client.get("/tools")
             response.raise_for_status()
             
-            tools_data = response.json()
+            tools_data = await response.json()
             return [MCPTool(**tool) for tool in tools_data.get("tools", [])]
             
         except httpx.HTTPError as e:
@@ -135,7 +135,7 @@ class MCPClient:
             )
             response.raise_for_status()
             
-            result = response.json()
+            result = await response.json()
             logger.info(f"Tool {tool_name} called successfully")
             return result
             
@@ -155,7 +155,7 @@ class MCPClient:
             response = await self._client.get("/resources")
             response.raise_for_status()
             
-            resources_data = response.json()
+            resources_data = await response.json()
             return [MCPResource(**resource) for resource in resources_data.get("resources", [])]
             
         except httpx.HTTPError as e:
@@ -174,7 +174,7 @@ class MCPClient:
             response = await self._client.get(f"/resources/read", params={"uri": uri})
             response.raise_for_status()
             
-            result = response.json()
+            result = await response.json()
             logger.info(f"Resource {uri} read successfully")
             return result
             
@@ -194,7 +194,7 @@ class MCPClient:
             response = await self._client.get("/info")
             response.raise_for_status()
             
-            return response.json()
+            return await response.json()
             
         except httpx.HTTPError as e:
             logger.error(f"Failed to get server info: {e}")
