@@ -1,1 +1,1 @@
-"""Test suite for Graph MCP MVP.""" 
+"""Test suite for Graph MCP MVP."""

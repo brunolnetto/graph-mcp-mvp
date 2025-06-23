@@ -1,10 +1,10 @@
 """Graph operations API endpoints."""
 
-from typing import Dict, List, Any, Optional
-from fastapi import APIRouter, HTTPException, Depends, Query
+from typing import Any
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from app.config import settings
 from app.core.neo4j_client import Neo4jClient
 from app.dependencies import get_neo4j_client
 
@@ -15,22 +15,22 @@ class CypherQuery(BaseModel):
     """Request model for a Cypher query."""
 
     query: str = Field(..., min_length=1)
-    parameters: Optional[Dict[str, Any]] = None
+    parameters: dict[str, Any] | None = None
 
 
 class NodeResponse(BaseModel):
     """Response model for a graph node."""
 
     id: int
-    labels: List[str]
-    properties: Dict[str, Any]
+    labels: list[str]
+    properties: dict[str, Any]
 
 
 class NodeCreate(BaseModel):
     """Request model for creating a node."""
 
-    labels: List[str]
-    properties: Dict[str, Any]
+    labels: list[str]
+    properties: dict[str, Any]
 
 
 class RelationshipCreate(BaseModel):
@@ -38,7 +38,7 @@ class RelationshipCreate(BaseModel):
     from_node_id: int
     to_node_id: int
     relationship_type: str
-    properties: Optional[Dict[str, Any]] = None
+    properties: dict[str, Any] | None = None
 
 
 @router.post("/nodes", status_code=201)
@@ -56,8 +56,8 @@ async def create_node(
 
 @router.get("/nodes")
 async def get_nodes(
-    labels: List[str] = Query(None, description="List of labels to filter by"),
-    properties: Optional[Dict[str, Any]] = None,
+    labels: list[str] = Query(None, description="List of labels to filter by"),
+    properties: dict[str, Any] | None = None,
     limit: int = 100,
     neo4j: Neo4jClient = Depends(get_neo4j_client),
 ):
@@ -67,7 +67,7 @@ async def get_nodes(
         if labels:
             for label_group in labels:
                 processed_labels.extend(label_group.split(','))
-        
+
         nodes = await neo4j.get_nodes(processed_labels or None, properties, limit)
         return nodes
     except Exception as e:
@@ -81,7 +81,7 @@ async def execute_cypher(
 ):
     """Execute a Cypher query."""
     try:
-        result = await neo4j.execute_cypher(query.query, query.parameters)
+        result = await neo4j.execute_query(query.query, query.parameters)
         return {"result": result}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to execute query: {str(e)}")
@@ -90,7 +90,7 @@ async def execute_cypher(
 @router.put("/nodes/{node_id}")
 async def update_node(
     node_id: int,
-    properties: Dict[str, Any],
+    properties: dict[str, Any],
     neo4j: Neo4jClient = Depends(get_neo4j_client),
 ):
     """Update a node's properties by its ID."""
@@ -99,10 +99,8 @@ async def update_node(
         if not node:
             raise HTTPException(status_code=404, detail="Node not found")
         return node
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except ValueError as e: raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e: raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.delete("/nodes/{node_id}", status_code=204)
@@ -113,13 +111,12 @@ async def delete_node(
     """Delete a node by its ID."""
     try:
         success = await neo4j.delete_node(node_id)
-        if not success:
+        if success is not True:
             raise HTTPException(status_code=404, detail="Node not found")
         return {}
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except HTTPException: raise
+    except ValueError as e: raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e: raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/relationships", status_code=201)
@@ -127,7 +124,7 @@ async def create_relationship(
     from_node_id: int,
     to_node_id: int,
     relationship_type: str,
-    properties: Optional[Dict[str, Any]] = None,
+    properties: dict[str, Any] | None = None,
     neo4j: Neo4jClient = Depends(get_neo4j_client),
 ):
     """Create a relationship between two nodes."""
@@ -140,6 +137,8 @@ async def create_relationship(
                 status_code=404, detail="One or both nodes not found"
             )
         return relationship
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -150,5 +149,4 @@ async def get_graph_stats(neo4j: Neo4jClient = Depends(get_neo4j_client)):
     try:
         stats = await neo4j.get_graph_stats()
         return stats
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) 
+    except Exception as e: raise HTTPException(status_code=500, detail=str(e))

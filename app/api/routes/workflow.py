@@ -1,28 +1,45 @@
 """Workflow management API endpoints."""
 
-from typing import Dict, List, Any, Optional, Literal
-from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel
+from typing import Any, Literal
 
-from app.dependencies import get_workflow_manager
-from app.dependencies import WorkflowManager
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, model_validator
+
+from app.dependencies import WorkflowManager, get_workflow_manager
 
 router = APIRouter(prefix="/workflow", tags=["workflow"])
 
 
 class WorkflowConfig(BaseModel):
-    """Model for workflow configuration."""
+    """Model for workflow configuration. Supports both CrewAI and LangGraph engines."""
     name: str
     description: str
-    tasks: List[Dict[str, Any]]
-    engine: Optional[Literal["crewai", "langgraph"]] = None
+    # CrewAI fields
+    tasks: list[dict[str, Any]] | None = None
+    # LangGraph fields
+    nodes: list[dict[str, Any]] | None = None
+    edges: list[dict[str, Any]] | None = None
+    start_node: str | None = None
+    engine: Literal["crewai", "langgraph"] | None = None
+
+    @model_validator(mode="after")
+    def validate_for_engine(self):
+        if self.engine == "crewai":
+            if not self.tasks:
+                raise ValueError("'tasks' is required for CrewAI engine")
+        elif self.engine == "langgraph":
+            if not (self.nodes and self.edges and self.start_node):
+                raise ValueError("'nodes', 'edges', and 'start_node' are required for LangGraph engine")
+        else:
+            raise ValueError("'engine' must be either 'crewai' or 'langgraph'")
+        return self
 
 
 class WorkflowResponse(BaseModel):
     """Model for workflow response."""
     workflow_id: str
     status: str
-    result: Optional[Dict[str, Any]] = None
+    result: dict[str, Any] | None = None
     engine: str
 
 
@@ -39,7 +56,7 @@ async def execute_workflow(
     """Execute a workflow with the specified or default engine."""
     try:
         engine = manager.get_engine(config.engine)
-        result = await engine.execute(config)
+        result = await engine.execute(config.model_dump())
         return WorkflowResponse(
             workflow_id=result.get("workflow_id", "unknown"),
             status=result.get("status", "unknown"),
@@ -82,6 +99,8 @@ async def switch_engine(
 @router.get("/engine/current")
 async def get_current_engine(manager: WorkflowManager = Depends(get_workflow_manager)):
     """Get the current workflow engine."""
+    if manager.current_engine is None:
+        raise HTTPException(status_code=500, detail="Current engine is not set.")
     return {
         "current_engine": manager.current_engine,
         "engine_info": {
@@ -101,12 +120,13 @@ async def run_demo_workflow(manager: WorkflowManager = Depends(get_workflow_mana
             {"name": "Data Collection", "type": "research"},
             {"name": "Analysis", "type": "processing"},
             {"name": "Report Generation", "type": "output"}
-        ]
+        ],
+        engine="crewai"
     )
-    
+
     try:
         engine = manager.get_engine()
-        result = await engine.execute(demo_config)
+        result = await engine.execute(demo_config.model_dump())
         return WorkflowResponse(
             workflow_id=result.get("workflow_id", "unknown"),
             status=result.get("status", "unknown"),

@@ -1,12 +1,12 @@
 """Pytest configuration and fixtures."""
 
-import pytest
-from fastapi.testclient import TestClient
 from unittest.mock import AsyncMock, MagicMock
 
-from app.main import app
-from app.config import settings
+import pytest
+from fastapi.testclient import TestClient
+
 from app.dependencies import get_neo4j_client, get_workflow_manager
+from app.main import app
 
 
 @pytest.fixture
@@ -28,12 +28,12 @@ def mock_neo4j_override():
 def mock_workflow_manager_override():
     """Override the WorkflowManager dependency with a mock."""
     mock_manager = MagicMock()
-    
+
     # This engine will be returned by the manager.
     # Its `execute` method must be awaitable, so it's an AsyncMock.
     mock_engine = AsyncMock()
     mock_engine.name = "MockEngine"
-    
+
     # The result when the endpoint calls `await engine.execute(...)`
     mock_engine.execute.return_value = {
         "workflow_id": "mock_workflow_123",
@@ -41,11 +41,11 @@ def mock_workflow_manager_override():
         "result": {"message": "Mock execution successful"},
         "engine": "MockEngine",
     }
-    
+
     # Configure the manager to return our mock engine
     mock_manager.get_engine.return_value = mock_engine
     mock_manager.current_engine = "crewai"
-    
+
     app.dependency_overrides[get_workflow_manager] = lambda: mock_manager
     yield mock_manager
     app.dependency_overrides.clear()
@@ -100,4 +100,4 @@ def sample_workflow_config():
             {"name": "Task 2", "type": "processing"}
         ],
         "engine": "crewai"
-    } 
+    }

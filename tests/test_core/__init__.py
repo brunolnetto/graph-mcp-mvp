@@ -1,1 +1,1 @@
-"""Core services tests package.""" 
+"""Core services tests package."""

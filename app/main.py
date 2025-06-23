@@ -1,11 +1,13 @@
 """Main FastAPI application entry point."""
 
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
-from app.config import settings
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
 from app.api.routes import graph, workflow
+from app.config import settings
+from app.logging_config import setup_logging
 
 
 @asynccontextmanager
@@ -42,6 +44,8 @@ app.add_middleware(
 app.include_router(graph.router, prefix=settings.api_v1_str)
 app.include_router(workflow.router, prefix=settings.api_v1_str)
 
+setup_logging()
+
 
 @app.get("/")
 async def root():
@@ -69,10 +73,10 @@ async def health_check():
 
 if __name__ == "__main__":
     import uvicorn
-    
+
     uvicorn.run(
         "app.main:app",
         host=settings.host,
         port=settings.port,
         reload=settings.debug,
-    ) 
+    )

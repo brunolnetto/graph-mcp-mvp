@@ -1,1 +1,1 @@
-"""Core functionality package for Graph MCP MVP.""" 
+"""Core functionality package for Graph MCP MVP."""

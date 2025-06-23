@@ -1,1 +1,1 @@
-"""API package for Graph MCP MVP.""" 
+"""API package for Graph MCP MVP."""

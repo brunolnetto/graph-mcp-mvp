@@ -1,9 +1,14 @@
 """Tests for Neo4j client functionality."""
 
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
-from neo4j.exceptions import ServiceUnavailable, AuthError, ClientError
+from neo4j.exceptions import ClientError, ServiceUnavailable
+
 from app.core.neo4j_client import Neo4jClient
+from app.dependencies import WorkflowManager
+from app.engines.crewai_engine import CrewAIEngine
+from app.engines.langgraph_engine import LangGraphEngine
 
 
 def create_mock_node(node_id, labels, properties):
@@ -11,14 +16,14 @@ def create_mock_node(node_id, labels, properties):
     mock_node = MagicMock()
     mock_node.id = node_id
     mock_node.labels = set(labels)
-    
+
     # Make the mock node behave like a dictionary for properties
     mock_node.items.return_value = properties.items()
     mock_node.keys.return_value = properties.keys()
     mock_node.values.return_value = properties.values()
     mock_node.__iter__ = lambda s: iter(properties)
     mock_node.__getitem__.side_effect = properties.__getitem__
-    
+
     return mock_node
 
 
@@ -88,7 +93,7 @@ class TestNeo4jClientQueries:
         mock_session_cm = AsyncMock()
         mock_session = AsyncMock()
         mock_result = AsyncMock()
-        
+
         mock_result.data.return_value = [{"name": "test"}]
         mock_session.run.return_value = mock_result
         mock_session_cm.__aenter__.return_value = mock_session
@@ -126,7 +131,7 @@ class TestNeo4jClientQueries:
                 mock_session_cm.__aenter__.return_value = mock_session
                 mock_driver.session = MagicMock(return_value=mock_session_cm)
                 neo4j_client._driver = mock_driver
-            
+
             mock_connect.side_effect = set_driver
             await neo4j_client.execute_query("MATCH (n) RETURN n")
             mock_connect.assert_called_once()
@@ -139,7 +144,7 @@ class TestNeo4jClientQueries:
             mock_exec.return_value = [{"n": mock_node}]
 
             result = await neo4j_client.create_node(["Test"], {"name": "Test Node"})
-            
+
             assert result["id"] == 1
             assert result["labels"] == ["Test"]
             assert result["properties"]["name"] == "Test Node"
@@ -151,9 +156,9 @@ class TestNeo4jClientQueries:
         with patch.object(neo4j_client, "execute_query", new=AsyncMock()) as mock_exec:
             mock_node = create_mock_node(1, ["Test"], {"name": "Updated"})
             mock_exec.return_value = [{"n": mock_node}]
-            
+
             result = await neo4j_client.update_node(1, {"name": "Updated"})
-            
+
             assert result["properties"]["name"] == "Updated"
 
     @pytest.mark.asyncio
@@ -162,7 +167,7 @@ class TestNeo4jClientQueries:
         with patch.object(neo4j_client, "execute_query", new=AsyncMock()) as mock_exec:
             await neo4j_client.clear_database()
             mock_exec.assert_called_once_with(
-                "MATCH (n) DETACH DELETE n", database=None
+                "MATCH (n) DETACH DELETE n", parameters=None, database=None
             )
 
     @pytest.mark.asyncio
@@ -170,25 +175,25 @@ class TestNeo4jClientQueries:
         """Test node creation failure."""
         with patch.object(neo4j_client, "execute_query", new=AsyncMock()) as mock_exec:
             mock_exec.return_value = []  # No result
-            
+
             with pytest.raises(ValueError, match="Failed to create node"):
                 await neo4j_client.create_node(["Person"], {"name": "John"})
-    
+
     @pytest.mark.asyncio
     async def test_get_nodes_success(self, neo4j_client):
         """Test successful node retrieval."""
         with patch.object(neo4j_client, "execute_query", new=AsyncMock()) as mock_exec:
             mock_node = create_mock_node(1, ["Person"], {"name": "John"})
             mock_exec.return_value = [{"n": mock_node}]
-            
+
             result = await neo4j_client.get_nodes(["Person"])
-            
+
             assert len(result) == 1
             assert result[0]["id"] == 1
             assert "Person" in result[0]["labels"]
             assert result[0]["properties"]["name"] == "John"
             mock_exec.assert_called_once()
-    
+
     @pytest.mark.asyncio
     async def test_get_nodes_with_properties(self, neo4j_client):
         """Test node retrieval with property filtering."""
@@ -197,25 +202,25 @@ class TestNeo4jClientQueries:
         mock_session = AsyncMock()
         mock_result = AsyncMock()
         mock_node = create_mock_node(1, ["Person"], {"name": "John"})
-        
+
         mock_result.data.return_value = [{"n": mock_node}]
         mock_session.run.return_value = mock_result
         mock_session_cm.__aenter__.return_value = mock_session
         mock_driver.session = MagicMock(return_value=mock_session_cm)
         neo4j_client._driver = mock_driver
-        
+
         result = await neo4j_client.get_nodes(
             labels=["Person"],
             properties={"name": "John"},
             limit=10
         )
-        
+
         assert len(result) == 1
         # Verify the query was constructed with WHERE clause
         call_args, call_kwargs = mock_session.run.call_args
         assert "WHERE" in call_args[0]
         assert "LIMIT" in call_args[0]
-    
+
     @pytest.mark.asyncio
     async def test_update_node_not_found(self, neo4j_client):
         """Test node update when node not found."""
@@ -228,10 +233,10 @@ class TestNeo4jClientQueries:
         mock_session_cm.__aenter__.return_value = mock_session
         mock_driver.session = MagicMock(return_value=mock_session_cm)
         neo4j_client._driver = mock_driver
-        
+
         with pytest.raises(ValueError, match="Node with id 999 not found"):
             await neo4j_client.update_node(999, {"age": 25})
-    
+
     @pytest.mark.asyncio
     async def test_delete_node_success(self, neo4j_client):
         """Test successful node deletion."""
@@ -246,11 +251,11 @@ class TestNeo4jClientQueries:
         mock_session_cm.__aenter__.return_value = mock_session
         mock_driver.session = MagicMock(return_value=mock_session_cm)
         neo4j_client._driver = mock_driver
-        
+
         result = await neo4j_client.delete_node(1)
-        
+
         assert result is True
-    
+
     @pytest.mark.asyncio
     async def test_delete_node_not_found(self, neo4j_client):
         """Test node deletion when node not found."""
@@ -265,11 +270,11 @@ class TestNeo4jClientQueries:
         mock_session_cm.__aenter__.return_value = mock_session
         mock_driver.session = MagicMock(return_value=mock_session_cm)
         neo4j_client._driver = mock_driver
-        
+
         result = await neo4j_client.delete_node(999)
-        
+
         assert result is False
-    
+
     @pytest.mark.asyncio
     async def test_create_relationship_success(self, neo4j_client):
         """Test successful relationship creation."""
@@ -281,10 +286,10 @@ class TestNeo4jClientQueries:
         mock_rel.id = 1
         mock_rel.type = "KNOWS"
         mock_rel.items.return_value = {"since": "2023"}.items()
-        
+
         mock_node_a = create_mock_node(1, ["Person"], {})
         mock_node_b = create_mock_node(2, ["Person"], {})
-        
+
         mock_record = MagicMock()
         mock_record.__getitem__.side_effect = lambda key: {
             "a": mock_node_a,
@@ -296,14 +301,14 @@ class TestNeo4jClientQueries:
         mock_session_cm.__aenter__.return_value = mock_session
         mock_driver.session = MagicMock(return_value=mock_session_cm)
         neo4j_client._driver = mock_driver
-        
+
         result = await neo4j_client.create_relationship(1, 2, "KNOWS", {"since": "2023"})
-        
+
         assert result["id"] == 1
         assert result["type"] == "KNOWS"
         assert result["from_node_id"] == 1
         assert result["to_node_id"] == 2
-    
+
     @pytest.mark.asyncio
     async def test_get_relationships_success(self, neo4j_client):
         """Test successful relationship retrieval."""
@@ -318,7 +323,7 @@ class TestNeo4jClientQueries:
 
         mock_node_n = create_mock_node(1, ["Person"], {})
         mock_node_m = create_mock_node(2, ["Person"], {})
-        
+
         mock_record = MagicMock()
         mock_record.__getitem__.side_effect = lambda key: {
             "n": mock_node_n,
@@ -330,13 +335,13 @@ class TestNeo4jClientQueries:
         mock_session_cm.__aenter__.return_value = mock_session
         mock_driver.session = MagicMock(return_value=mock_session_cm)
         neo4j_client._driver = mock_driver
-        
+
         result = await neo4j_client.get_relationships(node_id=1, relationship_type="KNOWS")
-        
+
         assert len(result) == 1
         assert result[0]["id"] == 1
         assert result[0]["type"] == "KNOWS"
-    
+
     @pytest.mark.asyncio
     async def test_get_graph_stats_success(self, neo4j_client):
         """Test successful graph statistics retrieval."""
@@ -346,15 +351,15 @@ class TestNeo4jClientQueries:
                 [{"total_nodes": 5, "labels": ["Person", "Company"]}],  # Node stats
                 [{"total_relationships": 3, "relationship_types": ["KNOWS", "WORKS_FOR"]}] # Rel stats
             ]
-            
+
             result = await neo4j_client.get_graph_stats()
-            
+
             assert result["total_nodes"] == 5
             assert result["total_relationships"] == 3
             assert "Person" in result["node_labels"]
             assert "KNOWS" in result["relationship_types"]
             assert mock_exec.call_count == 2
-    
+
     @pytest.mark.asyncio
     async def test_get_graph_stats_error(self, neo4j_client):
         """Test graph statistics retrieval with error."""
@@ -365,14 +370,14 @@ class TestNeo4jClientQueries:
         mock_session_cm.__aenter__.return_value = mock_session
         mock_driver.session = MagicMock(return_value=mock_session_cm)
         neo4j_client._driver = mock_driver
-        
+
         result = await neo4j_client.get_graph_stats()
-        
+
         # Should return error info instead of raising
         assert "error" in result
         assert result["total_nodes"] == 0
         assert result["total_relationships"] == 0
-    
+
     @pytest.mark.asyncio
     async def test_auto_connect_on_operation(self, neo4j_client):
         """Test that client auto-connects when performing operations."""
@@ -392,4 +397,53 @@ class TestNeo4jClientQueries:
             neo4j_client, "connect", side_effect=mock_connect_side_effect, autospec=True
         ) as mock_connect:
             await neo4j_client.execute_query("MATCH (n) RETURN n")
-            mock_connect.assert_called_once() 
+            mock_connect.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_delete_node_returns_false(self, neo4j_client):
+        with patch.object(neo4j_client, "execute_query", new=AsyncMock(return_value=[])):
+            result = await neo4j_client.delete_node(123)
+            assert result is False
+
+    @pytest.mark.asyncio
+    async def test_create_relationship_failure(self, neo4j_client):
+        with patch.object(neo4j_client, "execute_query", new=AsyncMock(return_value=[])):
+            with pytest.raises(ValueError):
+                await neo4j_client.create_relationship(1, 2, "KNOWS")
+
+    @pytest.mark.asyncio
+    async def test_clear_database_failure(self, neo4j_client):
+        with patch.object(neo4j_client, "execute_query", new=AsyncMock(side_effect=Exception("fail"))):
+            result = await neo4j_client.clear_database()
+            assert result is False
+
+
+def test_workflow_manager_get_engine_unknown():
+    manager = WorkflowManager()
+    with pytest.raises(ValueError):
+        manager.get_engine("unknown")
+
+def test_workflow_manager_switch_engine_unknown():
+    manager = WorkflowManager()
+    with pytest.raises(ValueError):
+        manager.switch_engine("unknown")
+
+@pytest.mark.asyncio
+async def test_crewai_engine_methods_raise():
+    engine = CrewAIEngine()
+    with pytest.raises(NotImplementedError):
+        await engine.execute_workflow({})
+    with pytest.raises(NotImplementedError):
+        await engine.get_workflow_status("id")
+    with pytest.raises(NotImplementedError):
+        await engine.cancel_workflow("id")
+
+@pytest.mark.asyncio
+async def test_langgraph_engine_methods_raise():
+    engine = LangGraphEngine()
+    with pytest.raises(NotImplementedError):
+        await engine.execute_workflow({})
+    with pytest.raises(NotImplementedError):
+        await engine.get_workflow_status("id")
+    with pytest.raises(NotImplementedError):
+        await engine.cancel_workflow("id")

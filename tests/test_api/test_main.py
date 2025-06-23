@@ -1,6 +1,5 @@
 """Tests for main application endpoints."""
 
-import pytest
 from fastapi.testclient import TestClient
 
 
@@ -43,16 +42,17 @@ def test_redoc_available(client: TestClient):
 # Test lifespan functionality
 def test_lifespan_startup():
     """Test application lifespan startup."""
-    from app.main import lifespan
     from fastapi import FastAPI
-    
+
+    from app.main import lifespan
+
     app = FastAPI()
-    
+
     # Test that lifespan can be entered and exited
     async def test_lifespan():
         async with lifespan(app):
             pass
-    
+
     # This should not raise any exceptions
     import asyncio
-    asyncio.run(test_lifespan()) 
+    asyncio.run(test_lifespan())
