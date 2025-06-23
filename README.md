@@ -81,6 +81,23 @@ The `justfile` provides convenient commands for common development tasks.
     just format
     ```
 
+### Pre-commit Hooks
+
+This project uses [pre-commit](https://pre-commit.com/) to enforce code style and quality on every commit. Hooks include:
+- ruff (linting)
+- black (formatting)
+- isort (import sorting)
+- end-of-file-fixer
+
+To set up pre-commit:
+
+```bash
+pip install pre-commit
+pre-commit install
+```
+
+This will automatically run the hooks on staged files at every commit.
+
 ### API Documentation
 
 Once the application is running, you can access the interactive API documentation:
