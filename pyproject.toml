@@ -110,3 +110,10 @@ exclude_lines = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["app"] 
+
+[dependency-groups]
+dev = [
+    "mypy>=1.16.1",
+    "pytest-asyncio>=1.0.0",
+    "pytest-cov>=6.2.1",
+]

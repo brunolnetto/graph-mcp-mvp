@@ -87,7 +87,7 @@ fmt:
 lint:
     #!/usr/bin/env bash
     echo "🔍 Linting code..."
-    uv run ruff check .
+    uv run ruff check --fix .
     echo "✅ Linting complete"
 
 # Type checking
