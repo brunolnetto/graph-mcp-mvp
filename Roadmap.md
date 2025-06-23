@@ -54,4 +54,17 @@ The final step is to automate the deployment process.
 
 -   [ ] **Create Production `docker-compose.yml`:** Build a compose file optimized for a production deployment.
 -   [ ] **Set up CI/CD Pipeline:** Create a pipeline (e.g., using GitHub Actions) to automatically run tests, lint, and build Docker images on every push to `master`.
--   [ ] **Configure Secrets Management:** Implement a strategy for securely managing production secrets (e.g., API keys, database credentials). 
+-   [ ] **Configure Secrets Management:** Implement a strategy for securely managing production secrets (e.g., API keys, database credentials).
+
+### Phase 9: Add a Prototyping UI
+
+To make the application more interactive and user-friendly, we can add a simple web UI.
+
+-   [ ] **Choose a Library:** Select a suitable rapid-prototyping library like [Streamlit](https://streamlit.io/) or [Gradio](https://www.gradio.app/).
+-   [ ] **Design the UI:** Create a simple interface that allows users to:
+    -   Switch the active workflow engine.
+    -   Define and execute a workflow.
+    -   View the results from the workflow.
+    -   Interact with the graph database (e.g., run simple queries, view stats).
+-   [ ] **Integrate with API:** The UI should interact with our existing FastAPI backend to perform these actions.
+-   [ ] **Containerize the UI:** Add the UI as a new service in `docker-compose.yml` so it can be run alongside the rest of the application stack. 
