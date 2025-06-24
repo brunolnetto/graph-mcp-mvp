@@ -10,18 +10,16 @@ class Settings(BaseSettings):
     """Application settings with environment variable support."""
 
     # Pydantic v2 config
-    model_config = {
-        "env_file": ".env",
-        "case_sensitive": False,
-        "extra": "ignore"
-    }
+    model_config = {"env_file": ".env", "case_sensitive": False, "extra": "ignore"}
 
     # Application
     app_env: str = Field(default="development")  # development, production, testing
     app_name: str = Field(default="Graph MCP MVP")
     project_name: str = Field(default="Graph MCP MVP")
     version: str = Field(default="0.1.0")
-    description: str = Field(default="Minimal FastAPI application with MCP, Neo4j, and workflow engine swapping")
+    description: str = Field(
+        default="Minimal FastAPI application with MCP, Neo4j, and workflow engine swapping"
+    )
     debug: bool = Field(default=False)
     log_level: str = Field(default="INFO")
 
@@ -41,11 +39,15 @@ class Settings(BaseSettings):
     mcp_timeout: int = Field(default=30)
 
     # Workflow Engine
-    default_workflow_engine: Literal["crewai", "langgraph"] = Field(default="crewai")
+    default_workflow_engine: Literal["crewai", "langgraph"] = Field(
+        default="crewai", validation_alias="DEFAULT_WORKFLOW_ENGINE"
+    )
     workflow_engine_timeout: int = Field(default=300)
 
     # CORS
-    cors_origins: list[str] = Field(default=["http://localhost:3000", "http://localhost:8000"])
+    cors_origins: list[str] = Field(
+        default=["http://localhost:3000", "http://localhost:8000"]
+    )
     cors_allow_credentials: bool = Field(default=True)
 
     # Security
@@ -57,6 +59,7 @@ class Settings(BaseSettings):
 
     # Docker
     docker_image_name: str = Field(default="graph-mcp-mvp")
+
 
 # Global settings instance
 settings = Settings()

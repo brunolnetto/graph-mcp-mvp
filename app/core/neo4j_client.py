@@ -17,7 +17,7 @@ class Neo4jClient:
         uri: str | None = None,
         user: str | None = None,
         password: str | None = None,
-        database: str | None = None
+        database: str | None = None,
     ):
         """Initialize Neo4j client."""
         self.uri = uri or settings.neo4j_uri
@@ -39,8 +39,7 @@ class Neo4jClient:
         """Establish connection to Neo4j."""
         try:
             self._driver = AsyncGraphDatabase.driver(
-                self.uri,
-                auth=(self.user, self.password)
+                self.uri, auth=(self.user, self.password)
             )
             # Verify connection
             await self._driver.verify_connectivity()
@@ -60,7 +59,7 @@ class Neo4jClient:
         self,
         query: str,
         parameters: dict[str, Any] | None = None,
-        database: str | None = None
+        database: str | None = None,
     ) -> list[dict[str, Any]]:
         """Execute a Cypher query."""
         if not self._driver:
@@ -68,7 +67,9 @@ class Neo4jClient:
         if not self._driver:
             raise RuntimeError("Neo4j driver is not initialized.")
         try:
-            async with self._driver.session(database=database or self.database) as session:
+            async with self._driver.session(
+                database=database or self.database
+            ) as session:
                 result = await session.run(query, parameters or {})
                 records = await result.data()
                 return records
@@ -80,10 +81,7 @@ class Neo4jClient:
             raise
 
     async def create_node(
-        self,
-        labels: list[str],
-        properties: dict[str, Any],
-        database: str | None = None
+        self, labels: list[str], properties: dict[str, Any], database: str | None = None
     ) -> dict[str, Any]:
         """Create a node with specified labels and properties."""
         labels_str = ":".join(labels)
@@ -102,7 +100,7 @@ class Neo4jClient:
             return {
                 "id": node.id,
                 "labels": list(node.labels),
-                "properties": dict(node)
+                "properties": dict(node),
             }
         raise ValueError("Failed to create node")
 
@@ -111,7 +109,7 @@ class Neo4jClient:
         labels: list[str] | None = None,
         properties: dict[str, Any] | None = None,
         limit: int | None = None,
-        database: str | None = None
+        database: str | None = None,
     ) -> list[dict[str, Any]]:
         """Get nodes with optional filtering."""
         if labels:
@@ -121,7 +119,7 @@ class Neo4jClient:
             query = "MATCH (n)"
 
         if properties:
-            conditions = [f"n.{k} = ${k}" for k in properties.keys()]
+            conditions = [f"n.{k} = ${k}" for k in properties]
             query += f" WHERE {' AND '.join(conditions)}"
 
         query += " RETURN n"
@@ -134,16 +132,13 @@ class Neo4jClient:
             {
                 "id": record["n"].id,
                 "labels": list(record["n"].labels),
-                "properties": dict(record["n"])
+                "properties": dict(record["n"]),
             }
             for record in result
         ]
 
     async def update_node(
-        self,
-        node_id: int,
-        properties: dict[str, Any],
-        database: str | None = None
+        self, node_id: int, properties: dict[str, Any], database: str | None = None
     ) -> dict[str, Any]:
         """Update node properties."""
         properties_str = ", ".join([f"n.{k} = ${k}" for k in properties])
@@ -162,15 +157,11 @@ class Neo4jClient:
             return {
                 "id": node.id,
                 "labels": list(node.labels),
-                "properties": dict(node)
+                "properties": dict(node),
             }
         raise ValueError(f"Node with id {node_id} not found")
 
-    async def delete_node(
-        self,
-        node_id: int,
-        database: str | None = None
-    ) -> bool:
+    async def delete_node(self, node_id: int, database: str | None = None) -> bool:
         """Delete a node by ID."""
         query = """
         MATCH (n) WHERE id(n) = $node_id
@@ -187,12 +178,12 @@ class Neo4jClient:
         to_node_id: int,
         relationship_type: str,
         properties: dict[str, Any] | None = None,
-        database: str | None = None
+        database: str | None = None,
     ) -> dict[str, Any]:
         """Create a relationship between two nodes."""
         properties_str = ""
         if properties:
-            properties_str = ", " + ", ".join([f"r.{k} = ${k}" for k in properties.keys()])
+            properties_str = ", " + ", ".join([f"r.{k} = ${k}" for k in properties])
 
         query = f"""
         MATCH (a), (b)
@@ -211,7 +202,7 @@ class Neo4jClient:
                 "type": rel.type,
                 "properties": dict(rel),
                 "from_node_id": result[0]["a"].id,
-                "to_node_id": result[0]["b"].id
+                "to_node_id": result[0]["b"].id,
             }
         raise ValueError("Failed to create relationship")
 
@@ -220,7 +211,7 @@ class Neo4jClient:
         node_id: int | None = None,
         relationship_type: str | None = None,
         direction: str = "both",
-        database: str | None = None
+        database: str | None = None,
     ) -> list[dict[str, Any]]:
         """Get relationships with optional filtering."""
         if node_id:
@@ -251,7 +242,7 @@ class Neo4jClient:
                 "type": record["r"].type,
                 "properties": dict(record["r"]),
                 "from_node": record["n"].id,
-                "to_node": record["m"].id
+                "to_node": record["m"].id,
             }
             for record in result
         ]
@@ -283,11 +274,15 @@ class Neo4jClient:
 
             return {
                 "total_nodes": node_stats[0]["total_nodes"] if node_stats else 0,
-                "total_relationships": rel_stats[0]["total_relationships"] if rel_stats else 0,
+                "total_relationships": (
+                    rel_stats[0]["total_relationships"] if rel_stats else 0
+                ),
                 "node_labels": unique_labels,
-                "relationship_types": rel_stats[0]["relationship_types"] if rel_stats else [],
+                "relationship_types": (
+                    rel_stats[0]["relationship_types"] if rel_stats else []
+                ),
                 "database": "Neo4j",
-                "uri": self.uri
+                "uri": self.uri,
             }
         except Exception as e:
             logging.error(f"Failed to get graph stats: {e}")
@@ -298,7 +293,7 @@ class Neo4jClient:
                 "relationship_types": [],
                 "database": "Neo4j",
                 "uri": self.uri,
-                "error": str(e)
+                "error": str(e),
             }
 
     async def clear_database(self, database: str | None = None) -> bool:
@@ -311,6 +306,23 @@ class Neo4jClient:
         except Exception as e:
             logging.error(f"Failed to clear database: {e}")
             return False
+
+    async def shortest_path(
+        self, source_id: int, target_id: int, relationship: str = "CONNECTED"
+    ) -> list[int]:
+        # Use Cypher to find the shortest path between two nodes
+        query = (
+            "MATCH (start), (end) "
+            "WHERE start.id = $source_id AND end.id = $target_id "
+            "MATCH path = shortestPath((start)-[:" + relationship + "*]-(end)) "
+            "RETURN [n IN nodes(path) | n.id] AS node_ids"
+        )
+        result = await self.execute_query(
+            query, {"source_id": source_id, "target_id": target_id}
+        )
+        if result and result[0].get("node_ids"):
+            return result[0]["node_ids"]
+        return []
 
 
 # Global client instance

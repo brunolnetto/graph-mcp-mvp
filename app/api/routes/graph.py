@@ -35,10 +35,17 @@ class NodeCreate(BaseModel):
 
 class RelationshipCreate(BaseModel):
     """Model for creating a relationship."""
+
     from_node_id: int
     to_node_id: int
     relationship_type: str
     properties: dict[str, Any] | None = None
+
+
+class ShortestPathQuery(BaseModel):
+    source_id: int
+    target_id: int
+    relationship: str = "CONNECTED"
 
 
 @router.post("/nodes", status_code=201)
@@ -51,7 +58,7 @@ async def create_node(
         new_node = await neo4j.create_node(node.labels, node.properties)
         return new_node
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.get("/nodes")
@@ -66,25 +73,26 @@ async def get_nodes(
         processed_labels = []
         if labels:
             for label_group in labels:
-                processed_labels.extend(label_group.split(','))
+                processed_labels.extend(label_group.split(","))
 
         nodes = await neo4j.get_nodes(processed_labels or None, properties, limit)
         return nodes
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/query")
 async def execute_cypher(
-    query: CypherQuery,
-    neo4j: Neo4jClient = Depends(get_neo4j_client)
+    query: CypherQuery, neo4j: Neo4jClient = Depends(get_neo4j_client)
 ):
     """Execute a Cypher query."""
     try:
         result = await neo4j.execute_query(query.query, query.parameters)
         return {"result": result}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to execute query: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to execute query: {str(e)}"
+        ) from e
 
 
 @router.put("/nodes/{node_id}")
@@ -99,8 +107,10 @@ async def update_node(
         if not node:
             raise HTTPException(status_code=404, detail="Node not found")
         return node
-    except ValueError as e: raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e: raise HTTPException(status_code=500, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.delete("/nodes/{node_id}", status_code=204)
@@ -114,9 +124,12 @@ async def delete_node(
         if success is not True:
             raise HTTPException(status_code=404, detail="Node not found")
         return {}
-    except HTTPException: raise
-    except ValueError as e: raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e: raise HTTPException(status_code=500, detail=str(e))
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/relationships", status_code=201)
@@ -133,14 +146,12 @@ async def create_relationship(
             from_node_id, to_node_id, relationship_type, properties
         )
         if not relationship:
-            raise HTTPException(
-                status_code=404, detail="One or both nodes not found"
-            )
+            raise HTTPException(status_code=404, detail="One or both nodes not found")
         return relationship
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.get("/stats")
@@ -149,4 +160,17 @@ async def get_graph_stats(neo4j: Neo4jClient = Depends(get_neo4j_client)):
     try:
         stats = await neo4j.get_graph_stats()
         return stats
-    except Exception as e: raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@router.post("/shortest-path")
+async def shortest_path(
+    query: ShortestPathQuery,
+    neo4j: Neo4jClient = Depends(get_neo4j_client),
+):
+    # TODO: Implement real shortest path logic
+    path = await neo4j.shortest_path(
+        query.source_id, query.target_id, query.relationship
+    )
+    return {"path": path}

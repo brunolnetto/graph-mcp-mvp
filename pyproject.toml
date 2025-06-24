@@ -39,7 +39,7 @@ build-backend = "hatchling.build"
 [tool.ruff]
 target-version = "py311"
 line-length = 88
-select = [
+lint.select = [
     "E",   # pycodestyle errors
     "W",   # pycodestyle warnings
     "F",   # pyflakes
@@ -53,12 +53,12 @@ select = [
     "TCH",     # flake8-type-checking
     "TID",     # flake8-tidy-imports
 ]
-ignore = [
+lint.ignore = [
     "E501",    # line too long, handled by black
     "B008",    # do not perform function calls in argument defaults
     "C901",    # too complex
-    "TCH002",  # The third-party import ... is used in type annotations
-    "TCH003",  # The standard library import ... is used in type annotations
+    "TC002",  # The third-party import ... is used in type annotations
+    "TC003",  # The standard library import ... is used in type annotations
 ]
 
 [tool.ruff.format]
@@ -66,9 +66,6 @@ quote-style = "double"
 indent-style = "space"
 skip-magic-trailing-comma = false
 line-ending = "auto"
-
-[tool.ruff.isort]
-known-first-party = ["app"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -84,6 +81,9 @@ addopts = [
     "--cov-report=xml",
 ]
 asyncio_mode = "auto"
+markers = [
+    "integration: mark test as integration test"
+]
 
 [tool.coverage.run]
 source = ["app"]
@@ -116,4 +116,5 @@ dev = [
     "mypy>=1.16.1",
     "pytest-asyncio>=1.0.0",
     "pytest-cov>=6.2.1",
+    "pytest-watch>=4.2.0",
 ]

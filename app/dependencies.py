@@ -16,15 +16,19 @@ _mcp_client = MCPClient()
 _crewai_engine = CrewAIEngine(mcp_client=_mcp_client)
 _langgraph_engine = LangGraphEngine(mcp_client=_mcp_client)
 
+
 async def get_neo4j_client() -> Neo4jClient:
     return _neo4j_client
+
 
 async def get_mcp_client() -> MCPClient:
     return _mcp_client
 
+
 # Global workflow manager using dependency injection
 class WorkflowManager:
     """Manages workflow execution and engine switching."""
+
     def __init__(
         self,
         crewai_engine: CrewAIEngine = Depends(lambda: _crewai_engine),
@@ -32,7 +36,9 @@ class WorkflowManager:
     ):
         self.crewai_engine = crewai_engine
         self.langgraph_engine = langgraph_engine
-        self.current_engine: Literal["crewai", "langgraph"] = settings.default_workflow_engine
+        self.current_engine: Literal["crewai", "langgraph"] = (
+            settings.default_workflow_engine
+        )
 
     def get_engine(self, engine_name: str | None = None):
         """Get the current or specified workflow engine."""
@@ -50,12 +56,15 @@ class WorkflowManager:
             raise ValueError(f"Unknown engine: {engine_name}")
         self.current_engine = engine_name  # type: ignore
 
+
 _workflow_manager = WorkflowManager(
     crewai_engine=_crewai_engine, langgraph_engine=_langgraph_engine
 )
 
+
 async def get_workflow_manager() -> WorkflowManager:
     return _workflow_manager
+
 
 async def get_workflow_engine(engine: str | None = None):
     engine = engine or settings.default_workflow_engine

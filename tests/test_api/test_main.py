@@ -55,4 +55,5 @@ def test_lifespan_startup():
 
     # This should not raise any exceptions
     import asyncio
+
     asyncio.run(test_lifespan())

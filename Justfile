@@ -115,6 +115,11 @@ test-file file:
     echo "🧪 Running tests in {{file}}..."
     uv run pytest {{file}}
 
+# Run tests in watch mode with entr
+test-watch:
+    #!/usr/bin/env bash
+    ls app/**/*.py tests/**/*.py | entr -c uv run pytest --cov=app --cov-report=term-missing --cov-report=html 
+
 # Build Docker image
 build:
     #!/usr/bin/env bash
@@ -229,4 +234,7 @@ status:
     echo "  App: http://localhost:8000"
     echo "  Docs: http://localhost:8000/docs"
     echo "  Health: http://localhost:8000/health"
-    echo "  Neo4j: http://localhost:7474" 
+    echo "  Neo4j: http://localhost:7474"
+
+clean-pytest-cache:
+	rm -rf .pytest_cache 

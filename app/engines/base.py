@@ -3,10 +3,12 @@
 from abc import ABC, abstractmethod
 from typing import Any
 
+from app.engines.schemas import WorkflowDefinition
+
 
 class WorkflowEngine(ABC):
     @abstractmethod
-    async def execute_workflow(self, workflow_config: Any) -> dict[str, Any]:
+    async def execute_workflow(self, workflow: WorkflowDefinition) -> dict[str, Any]:
         """Execute a workflow and return the result."""
         pass
 

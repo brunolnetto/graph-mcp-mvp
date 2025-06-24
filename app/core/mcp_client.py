@@ -11,17 +11,19 @@ from app.config import settings
 
 class MCPTool(BaseModel):
     """Model for MCP tool definition."""
+
     name: str
     description: str
-    inputSchema: dict[str, Any]
+    input_schema: dict[str, Any]
 
 
 class MCPResource(BaseModel):
     """Model for MCP resource definition."""
+
     uri: str
     name: str
     description: str
-    mimeType: str
+    mime_type: str
 
 
 class MCPClient:
@@ -31,7 +33,7 @@ class MCPClient:
         self,
         server_url: str | None = None,
         api_key: str | None = None,
-        timeout: int | None = None
+        timeout: int | None = None,
     ):
         """Initialize MCP client."""
         self.server_url = server_url or settings.mcp_server_url
@@ -57,9 +59,7 @@ class MCPClient:
                 headers["Authorization"] = f"Bearer {self.api_key}"
 
             self._client = httpx.AsyncClient(
-                base_url=self.server_url,
-                headers=headers,
-                timeout=self.timeout
+                base_url=self.server_url, headers=headers, timeout=self.timeout
             )
 
             # Test connection
@@ -99,7 +99,17 @@ class MCPClient:
             response = await self._client.get("/tools")
             response.raise_for_status()
             tools_data = await response.json()
-            return [MCPTool(**tool) for tool in tools_data.get("tools", [])]
+            return [
+                MCPTool(
+                    **{
+                        **(tool or {}),
+                        "input_schema": (tool or {}).get("input_schema")
+                        or (tool or {}).get("inputSchema"),
+                    }
+                )
+                for tool in tools_data.get("tools", [])
+                if tool
+            ]
         except httpx.HTTPError as e:
             logging.error(f"Failed to list tools: {e}")
             raise
@@ -108,10 +118,7 @@ class MCPClient:
             raise
 
     async def call_tool(
-        self,
-        tool_name: str,
-        arguments: dict[str, Any],
-        timeout: int | None = None
+        self, tool_name: str, arguments: dict[str, Any], timeout: int | None = None
     ) -> dict[str, Any]:
         """Call a tool on the MCP server."""
         if not self._client:
@@ -119,14 +126,9 @@ class MCPClient:
         if not self._client:
             raise RuntimeError("MCP client is not initialized.")
         try:
-            payload = {
-                "tool": tool_name,
-                "arguments": arguments
-            }
+            payload = {"tool": tool_name, "arguments": arguments}
             response = await self._client.post(
-                "/tools/call",
-                json=payload,
-                timeout=timeout or self.timeout
+                "/tools/call", json=payload, timeout=timeout or self.timeout
             )
             response.raise_for_status()
             result = await response.json()
@@ -149,7 +151,17 @@ class MCPClient:
             response = await self._client.get("/resources")
             response.raise_for_status()
             resources_data = await response.json()
-            return [MCPResource(**resource) for resource in resources_data.get("resources", [])]
+            return [
+                MCPResource(
+                    **{
+                        **(resource or {}),
+                        "mime_type": (resource or {}).get("mime_type")
+                        or (resource or {}).get("mimeType"),
+                    }
+                )
+                for resource in resources_data.get("resources", [])
+                if resource
+            ]
         except httpx.HTTPError as e:
             logging.error(f"Failed to list resources: {e}")
             raise
@@ -211,26 +223,29 @@ class MockMCPClient:
             MCPTool(
                 name="search_web",
                 description="Search the web for information",
-                inputSchema={
+                input_schema={
                     "type": "object",
                     "properties": {
                         "query": {"type": "string", "description": "Search query"}
                     },
-                    "required": ["query"]
-                }
+                    "required": ["query"],
+                },
             ),
             MCPTool(
                 name="analyze_text",
                 description="Analyze text content",
-                inputSchema={
+                input_schema={
                     "type": "object",
                     "properties": {
                         "text": {"type": "string", "description": "Text to analyze"},
-                        "analysis_type": {"type": "string", "enum": ["sentiment", "summary", "keywords"]}
+                        "analysis_type": {
+                            "type": "string",
+                            "enum": ["sentiment", "summary", "keywords"],
+                        },
                     },
-                    "required": ["text"]
-                }
-            )
+                    "required": ["text"],
+                },
+            ),
         ]
 
         self.resources = [
@@ -238,7 +253,7 @@ class MockMCPClient:
                 uri="file:///example.txt",
                 name="Example File",
                 description="An example text file",
-                mimeType="text/plain"
+                mime_type="text/plain",
             )
         ]
 
@@ -254,17 +269,19 @@ class MockMCPClient:
         """List mock tools."""
         return self.tools
 
-    async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+    async def call_tool(
+        self, tool_name: str, arguments: dict[str, Any]
+    ) -> dict[str, Any]:
         """Mock tool call."""
         if tool_name == "search_web":
             return {
                 "result": f"Mock search results for: {arguments.get('query', '')}",
-                "sources": ["mock_source_1", "mock_source_2"]
+                "sources": ["mock_source_1", "mock_source_2"],
             }
         elif tool_name == "analyze_text":
             return {
                 "result": f"Mock analysis of text: {arguments.get('text', '')[:50]}...",
-                "analysis_type": arguments.get("analysis_type", "summary")
+                "analysis_type": arguments.get("analysis_type", "summary"),
             }
         else:
             raise ValueError(f"Unknown tool: {tool_name}")
@@ -275,17 +292,14 @@ class MockMCPClient:
 
     async def read_resource(self, uri: str) -> dict[str, Any]:
         """Mock resource read."""
-        return {
-            "content": f"Mock content for {uri}",
-            "mimeType": "text/plain"
-        }
+        return {"content": f"Mock content for {uri}", "mime_type": "text/plain"}
 
     async def get_server_info(self) -> dict[str, Any]:
         """Get mock server info."""
         return {
             "name": "Mock MCP Server",
             "version": "1.0.0",
-            "capabilities": ["tools", "resources"]
+            "capabilities": ["tools", "resources"],
         }
 
     async def ping(self) -> bool:

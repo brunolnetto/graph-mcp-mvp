@@ -1,6 +1,6 @@
 """Pytest configuration and fixtures."""
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -51,24 +51,13 @@ def mock_workflow_manager_override():
     app.dependency_overrides.clear()
 
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def mock_neo4j_client():
-    """Mock Neo4j client for testing."""
-    mock_client = AsyncMock()
-    mock_client.create_node.return_value = {
-        "id": 1,
-        "labels": ["Person"],
-        "properties": {"name": "John Doe", "age": 30}
-    }
-    mock_client.get_nodes.return_value = [
-        {
-            "id": 1,
-            "labels": ["Person"],
-            "properties": {"name": "John Doe", "age": 30}
-        }
-    ]
-    mock_client.execute_cypher.return_value = [{"result": "success"}]
-    return mock_client
+    mock = AsyncMock()
+    mock.shortest_path.return_value = [1, 2, 3]
+    app.dependency_overrides[get_neo4j_client] = lambda: mock
+    yield mock
+    app.dependency_overrides = {}
 
 
 @pytest.fixture
@@ -83,21 +72,28 @@ def mock_workflow_manager():
 @pytest.fixture
 def sample_node_data():
     """Sample node data for testing."""
-    return {
-        "labels": ["Person"],
-        "properties": {"name": "John Doe", "age": 30}
-    }
+    return {"labels": ["Person"], "properties": {"name": "John Doe", "age": 30}}
 
 
 @pytest.fixture
 def sample_workflow_config():
-    """Sample workflow configuration for testing."""
+    """Sample workflow configuration for testing (canonical schema)."""
     return {
-        "name": "Test Workflow",
-        "description": "A test workflow",
+        "workflow_id": "test-workflow-1",
         "tasks": [
-            {"name": "Task 1", "type": "research"},
-            {"name": "Task 2", "type": "processing"}
+            {"id": "task1", "tool": "toolA", "arguments": {}, "depends_on": []},
+            {"id": "task2", "tool": "toolB", "arguments": {}, "depends_on": ["task1"]},
         ],
-        "engine": "crewai"
     }
+
+
+@pytest.fixture(autouse=True)
+def mock_litellm_completion():
+    mock_message = MagicMock()
+    mock_message.content = "mocked response"
+    mock_choice = MagicMock()
+    mock_choice.message = mock_message
+    mock_response = MagicMock()
+    mock_response.choices = [mock_choice]
+    with patch("litellm.completion", return_value=mock_response):
+        yield

@@ -2,13 +2,12 @@
 
 from unittest.mock import AsyncMock
 
-from fastapi.testclient import TestClient
 import pytest
-import httpx
-from httpx import AsyncClient, ASGITransport
+from fastapi.testclient import TestClient
+from httpx import ASGITransport, AsyncClient
 
-from app.main import app
 from app.dependencies import get_neo4j_client
+from app.main import app
 
 client = TestClient(app)
 
@@ -52,9 +51,11 @@ def test_get_nodes_with_labels(client: TestClient, mock_neo4j_override):
 @pytest.mark.asyncio
 async def test_execute_cypher_query():
     """Test executing a Cypher query."""
+
     class FakeNeo4jClient:
         async def execute_query(self, *args, **kwargs):
             return [{"result": "success"}]
+
     app.dependency_overrides[get_neo4j_client] = lambda: FakeNeo4jClient()
     query_data = {"query": "MATCH (n) RETURN n LIMIT 10", "parameters": {}}
     transport = ASGITransport(app=app)
@@ -99,7 +100,9 @@ def test_execute_cypher_invalid_query(client: TestClient):
     assert response.status_code == 422
 
 
-def test_create_node_exception(client: TestClient, mock_neo4j_override, sample_node_data):
+def test_create_node_exception(
+    client: TestClient, mock_neo4j_override, sample_node_data
+):
     """Test creating a node when an exception occurs."""
     mock_neo4j_override.create_node.side_effect = Exception("Database error")
     response = client.post("/api/v1/graph/nodes", json=sample_node_data)
@@ -118,9 +121,11 @@ def test_get_nodes_exception(client: TestClient, mock_neo4j_override):
 @pytest.mark.asyncio
 async def test_execute_cypher_exception():
     """Test executing Cypher query when an exception occurs."""
+
     class FakeNeo4jClient:
         async def execute_query(self, *args, **kwargs):
             raise Exception("Query error")
+
     app.dependency_overrides[get_neo4j_client] = lambda: FakeNeo4jClient()
     query_data = {"query": "MATCH (n) RETURN n", "parameters": {}}
     transport = ASGITransport(app=app)
@@ -148,7 +153,7 @@ def test_get_nodes_with_comma_separated_labels(client: TestClient, mock_neo4j_ov
     assert isinstance(data, list)
     mock_neo4j_override.get_nodes.assert_called_once()
     call_args, call_kwargs = mock_neo4j_override.get_nodes.call_args
-    assert call_args[0] == ['Person', 'User']
+    assert call_args[0] == ["Person", "User"]
     assert call_args[1] is None  # properties
     assert call_args[2] == 100  # limit
 
@@ -206,18 +211,20 @@ def test_create_relationship_not_found(client, mock_neo4j_override):
     response = client.post(
         "/api/v1/graph/relationships",
         params={"from_node_id": 1, "to_node_id": 2, "relationship_type": "KNOWS"},
-        json={}
+        json={},
     )
     assert response.status_code == 404
     assert "not found" in response.json()["detail"].lower()
 
 
 def test_create_relationship_exception(client, mock_neo4j_override):
-    mock_neo4j_override.create_relationship.side_effect = Exception("Relationship error")
+    mock_neo4j_override.create_relationship.side_effect = Exception(
+        "Relationship error"
+    )
     response = client.post(
         "/api/v1/graph/relationships",
         params={"from_node_id": 1, "to_node_id": 2, "relationship_type": "KNOWS"},
-        json={}
+        json={},
     )
     assert response.status_code == 500
     assert "Relationship error" in response.json()["detail"]
@@ -315,11 +322,44 @@ def test_delete_node_exception_100(client, mock_neo4j_override):
 
 
 def test_create_relationship_exception_100(client, mock_neo4j_override):
-    mock_neo4j_override.create_relationship.side_effect = Exception("100% Relationship Exception")
+    mock_neo4j_override.create_relationship.side_effect = Exception(
+        "100% Relationship Exception"
+    )
     response = client.post(
         "/api/v1/graph/relationships",
         params={"from_node_id": 1, "to_node_id": 2, "relationship_type": "KNOWS"},
-        json={}
+        json={},
     )
     assert response.status_code == 500
     assert "100% Relationship Exception" in response.json()["detail"]
+
+
+def test_shortest_path(client, mock_neo4j_client):
+    mock_neo4j_client.shortest_path.return_value = [1, 2, 3]
+    resp = client.post(
+        "/api/v1/graph/shortest-path", json={"source_id": 1, "target_id": 3}
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "path" in data
+    assert data["path"] == [1, 2, 3]
+
+
+def test_shortest_path_no_path(client, mock_neo4j_client):
+    mock_neo4j_client.shortest_path.return_value = []
+    resp = client.post(
+        "/api/v1/graph/shortest-path", json={"source_id": 10, "target_id": 20}
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["path"] == []
+
+
+def test_shortest_path_invalid_nodes(client, mock_neo4j_client):
+    mock_neo4j_client.shortest_path.return_value = []
+    resp = client.post(
+        "/api/v1/graph/shortest-path", json={"source_id": 999, "target_id": 888}
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["path"] == []

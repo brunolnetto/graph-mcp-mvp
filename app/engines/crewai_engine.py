@@ -1,64 +1,126 @@
 """CrewAI workflow engine implementation."""
 
-from typing import Any
-from app.core.mcp_client import MCPClient
-from app.engines.schemas import CrewAIWorkflowConfig, CrewAITaskConfig
-import uuid
+import contextlib
 import logging
+import uuid
+from typing import Any
+
+# Import CrewAI
+from crewai import Agent
+from crewai.tools import BaseTool
+
+from app.core.mcp_client import MCPClient
+from app.engines.base import WorkflowEngine
+from app.engines.schemas import CrewAIWorkflowConfig, WorkflowDefinition
 
 
-class CrewAIEngine:
+class MCPClientTool(BaseTool):
+    def __init__(self, mcp_client: MCPClient, tool_name: str, arguments: dict):
+        super().__init__(name=tool_name, description=f"MCPClient tool: {tool_name}")
+        object.__setattr__(self, "_mcp_client", mcp_client)
+        object.__setattr__(self, "_tool_name", tool_name)
+        object.__setattr__(self, "_arguments", arguments)
+
+    @property
+    def mcp_client(self):
+        return self._mcp_client
+
+    @property
+    def tool_name(self):
+        return self._tool_name
+
+    @property
+    def arguments(self):
+        return self._arguments
+
+    def _run(self, *args, **kwargs):
+        import asyncio
+
+        loop = None
+        with contextlib.suppress(RuntimeError):
+            loop = asyncio.get_running_loop()
+        if loop and loop.is_running():
+            coro = self.mcp_client.call_tool(self.tool_name, self.arguments)
+            return asyncio.run_coroutine_threadsafe(coro, loop).result()
+        else:
+            return asyncio.run(
+                self.mcp_client.call_tool(self.tool_name, self.arguments)
+            )
+
+
+class CrewAIEngine(WorkflowEngine):
     """
-    CrewAIEngine orchestrates a linear workflow using the provided configuration.
-    Each task is executed in order, using MCPClient to call external tools.
+    CrewAIEngine orchestrates a workflow using the real CrewAI library.
+    Each task is assigned to a default agent, and MCPClient is wrapped as a CrewAI tool.
     """
+
     def __init__(self, mcp_client: MCPClient | None = None):
         self.mcp_client = mcp_client
 
     async def execute(self, workflow_config: dict[str, Any]) -> dict[str, Any]:
-        """
-        Execute a workflow based on the provided configuration.
-        Steps:
-        1. Validate and parse the workflow config.
-        2. For each task, use MCPClient to call the required tool.
-        3. Aggregate and return results.
-        """
-        # 1. Validate and parse config
         config = CrewAIWorkflowConfig(**workflow_config)
         workflow_id = config.workflow_id or str(uuid.uuid4())
         results = {}
         errors = {}
+        agents = {}
+        tools = {}
+        tasks = []
+        logging.info(
+            f"Starting CrewAI workflow {workflow_id} with {len(config.tasks)} tasks"
+        )
+
+        if not self.mcp_client:
+            raise RuntimeError("MCPClient not provided to CrewAIEngine")
+
+        # 1. Create agents and tools for each task
+        for task_cfg in config.tasks:
+            agent_name = f"agent_{task_cfg.name}"
+            if agent_name not in agents:
+                agents[agent_name] = Agent(
+                    role=agent_name,
+                    goal=f"Complete task {task_cfg.name}",
+                    backstory=f"Agent for task {task_cfg.name}",
+                    tools=[],
+                )
+            tool = MCPClientTool(self.mcp_client, task_cfg.tool, task_cfg.arguments)
+            agents[agent_name].tools.append(tool)
+            tools[task_cfg.name] = tool
+            tasks.append((task_cfg.name, task_cfg.depends_on or []))
+
+        # 2. Dependency resolution and simulated execution
         completed = set()
-        task_map = {task.name: task for task in config.tasks}
-        ordered_tasks = self._resolve_task_order(config.tasks)
-        logging.info(f"Starting CrewAI workflow {workflow_id} with {len(ordered_tasks)} tasks")
-
-        # 2. Orchestrate tasks in order
-        for task_name in ordered_tasks:
-            task: CrewAITaskConfig = task_map[task_name]
-            # Check dependencies
-            if task.depends_on:
-                if not all(dep in completed for dep in task.depends_on):
-                    errors[task.name] = f"Dependencies not met: {task.depends_on}"
-                    continue
-            try:
-                # 3. Call MCPClient for each task
-                if not self.mcp_client:
-                    raise RuntimeError("MCPClient not provided to CrewAIEngine")
-                result = await self.mcp_client.call_tool(task.tool, task.arguments)
-                results[task.name] = result
-                completed.add(task.name)
-                logging.info(f"Task {task.name} completed successfully")
-            except Exception as e:
-                errors[task.name] = str(e)
-                logging.error(f"Task {task.name} failed: {e}")
-
-        # After resolving order, check for missing dependencies
-        if getattr(self, 'missing_dependencies', None):
-            for missing in self.missing_dependencies:
-                errors[missing] = f"Task dependency '{missing}' not found in workflow."
-
-        status = "completed" if not errors else "failed"
+        failed = set()
+        remaining = {name for name, _ in tasks}
+        depends_map = dict(tasks)
+        max_iterations = 2 * len(tasks) if tasks else 1
+        iterations = 0
+        while remaining:
+            progress = False
+            for name in list(remaining):
+                depends_on = depends_map[name]
+                if all(dep in completed for dep in depends_on):
+                    try:
+                        # Simulate running the task by calling the tool directly
+                        result = tools[name]._run()
+                        results[name] = result
+                        completed.add(name)
+                    except Exception as e:
+                        errors[name] = str(e)
+                        failed.add(name)
+                    remaining.remove(name)
+                    progress = True
+                elif any(dep in failed for dep in depends_on):
+                    errors[name] = "Dependencies not met"
+                    failed.add(name)
+                    remaining.remove(name)
+                    progress = True
+            iterations += 1
+            if not progress or iterations > max_iterations:
+                # Circular or unsatisfiable dependencies or runaway loop
+                for name in remaining:
+                    errors[name] = "Dependencies not met (circular or unsatisfiable)"
+                break
+        status = "failed" if errors else "completed"
         return {
             "workflow_id": workflow_id,
             "status": status,
@@ -66,41 +128,29 @@ class CrewAIEngine:
             "errors": errors,
         }
 
-    def _resolve_task_order(self, tasks: list[CrewAITaskConfig]) -> list[str]:
-        # Simple topological sort to respect dependencies
-        order = []
-        visited = set()
-        task_map = {task.name: task for task in tasks}
-        self.missing_dependencies = set()
-
-        def visit(name):
-            if name in visited:
-                return
-            visited.add(name)
-            task = task_map.get(name)
-            if not task:
-                self.missing_dependencies.add(name)
-                return
-            if task.depends_on:
-                for dep in task.depends_on:
-                    visit(dep)
-            order.append(name)
-
-        for task in tasks:
-            visit(task.name)
-        return order
+    async def execute_workflow(self, workflow: WorkflowDefinition) -> dict[str, Any]:
+        # Convert canonical WorkflowDefinition to CrewAIWorkflowConfig
+        crewai_tasks = [
+            {
+                "name": task.id,
+                "tool": task.tool,
+                "arguments": task.arguments,
+                "depends_on": task.depends_on or [],
+            }
+            for task in workflow.tasks
+        ]
+        config = {
+            "workflow_id": workflow.workflow_id,
+            "tasks": crewai_tasks,
+        }
+        return await self.execute(config)
 
     async def get_workflow_status(self, workflow_id: str) -> dict[str, Any]:
-        raise NotImplementedError("CrewAIEngine.get_workflow_status is not implemented yet.")
+        raise NotImplementedError("get_workflow_status must be implemented.")
 
     async def cancel_workflow(self, workflow_id: str) -> bool:
-        raise NotImplementedError("CrewAIEngine.cancel_workflow is not implemented yet.")
-
-    async def execute_workflow(self, workflow_config: Any) -> dict[str, Any]:
-        raise NotImplementedError("CrewAIEngine.execute_workflow is not implemented yet.")
+        raise NotImplementedError("cancel_workflow must be implemented.")
 
     @property
     def name(self):
         return "crewai"
-
-    # Optionally, add more helper methods for task orchestration, error handling, etc.
